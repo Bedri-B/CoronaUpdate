@@ -72,7 +72,7 @@ def Query(query):
         if query.lower().strip() == 'united states':
             query = 'USA'
         if query.lower().strip() == 'britain':
-            query = 'USA'
+            query = 'UK'
         if query.lower().strip() == 'england':
             query = 'UK'
         if query.lower().strip() == 'uk':
