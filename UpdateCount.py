@@ -4,6 +4,7 @@ import sqlite3
 import logging
 import requests
 import threading
+import json
 
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -159,7 +160,7 @@ def formatted_query_result(query, item):
 Total Case: {1}
 Total Death: {2}
 Total Recovery: {3}
-Update Date: {4}
+Total Test: {4}
 Critical case: {5}
 Active case: {6}
 Population: {7}
@@ -169,12 +170,11 @@ Update Date: {8}
                        item['update_time'], )
 
 
-
 country_connection = None
 
 
 def fetch_image(query, item):
-    background_image = "http://localhost:3000/images/corona_ (7).jpg"
+    background_image = "http://image.bedrubahru.com/images/corona_ (7).jpg"
     try:
         country_cursor = country_connection.cursor()
         country_cursor.execute("SELECT link FROM country WHERE name = '" + item['country'] + "'")
@@ -318,7 +318,7 @@ def fetch_image(query, item):
 </html>
     """
 
-    response = requests.post('http://localhost:3000/convert', {'html': parsed_html})
+    response = requests.post('http://image.bedribahru.com/convert', {'html': parsed_html})
     return response.content
 
 
@@ -354,10 +354,16 @@ def data_query(query):
             if key == sub_query.lower():
                 item = data[key]
                 found = True
+                r = None
                 try:
-                    r = {"type": 'image', 'data': fetch_image(main_query, item)}
-                except Exception as j:
-                    print(j.with_traceback())
+                    resp = json.loads(fetch_image(main_query, item))
+                    logger.info(resp['status'])
+                    if resp['status'] == '500':
+                        r = {"type": 'text', 'data': formatted_query_result(main_query, item)}
+                    else:
+                        r = {"type": 'image', 'data': resp['data'], 'text': formatted_query_result(main_query, item)}
+                except Exception as s:
+                    logger.info(str(s))
                     r = {"type": 'text', 'data': formatted_query_result(main_query, item)}
                 return r
         if not found:
@@ -370,6 +376,11 @@ def data_query(query):
 
 
 # Enable logging
+# logging.basicConfig(filename='Log_po.txt',
+#                     filemode='a',
+#                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+#                     datefmt='%H:%M:%S',
+#                     level=logging.DEBUG)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -378,6 +389,15 @@ logger = logging.getLogger(__name__)
 # Define a few command handlers. These usually take the two arguments update and
 # context.
 def start(update: Update, context: CallbackContext) -> None:
+    """Send a message when the command /start is issued."""
+    user = update.effective_user
+    update.message.reply_markdown_v2(
+        fr'Hi {user.mention_markdown_v2()}\!',
+        reply_markup=ForceReply(selective=True),
+    )
+
+
+def countries_list(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
     update.message.reply_markdown_v2(
@@ -396,7 +416,26 @@ def Handle(update: Update, context: CallbackContext) -> None:
         country_connection = sqlite3.connect('Corona.db')
     result = data_query(update.message.text)
     if result['type'] == 'image':
-        update.message.reply_photo(result['data'])
+        try:
+            update.message.reply_photo(result['data'])
+            response = requests.post('http://image.bedribahru.com/delete', {'name': result['data']})
+        except:
+            update.message.reply_text(result['text'])
+    elif result['type'] == 'text':
+        update.message.reply_text(result['data'])
+
+
+def world_update(update: Update, context: CallbackContext) -> None:
+    global country_connection
+    if country_connection is None:
+        country_connection = sqlite3.connect('Corona.db')
+    result = data_query("World")
+    if result['type'] == 'image':
+        try:
+            update.message.reply_photo(result['data'])
+            response = requests.post('http://image.bedribahru.com/delete', {'name': result['data']})
+        except:
+            update.message.reply_text(result['text'])
     elif result['type'] == 'text':
         update.message.reply_text(result['data'])
 
@@ -411,6 +450,8 @@ def main() -> None:
     updater = Updater(bot_token)
     dispatcher = updater.dispatcher
     dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("update", world_update))
+    dispatcher.add_handler(CommandHandler("list", countries_list))
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, Handle))
     updater.start_polling()
