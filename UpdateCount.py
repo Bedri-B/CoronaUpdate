@@ -37,7 +37,7 @@ image_cache = {}
 # fetch cache image if it exists in cache
 def get_cached_image(_query):
     try:
-        return image_cache[parse_string(_query)]
+        return image_cache[parse_string(_query)]['file_id']
     except:
         return None
 
@@ -170,6 +170,7 @@ def update_count(u_cursor, u_connection):
                      , data[key]['critical_case'], data[key]['active_case'], data[key]['population'],
                      data[key]['update_time'], key))
         u_connection.commit()
+        image_cache.clear()
     except:
         logger.error("Network Error, Couldn't fetch data")
 
@@ -439,7 +440,7 @@ def fetch_image(query, item):
         draw.rectangle((0, 0, 300, 250), fill=255)
         mask_im_blur = mask_im.filter(ImageFilter.GaussianBlur(10))
         my_image.paste(flag, (315, 50), mask_im_blur)
-        random_name = 'out/' + id_generator(10) + '.png'
+        random_name = 'out/' + id_generator(10) + '_' + str(int(time.time())) + '.png'
         my_image.save(random_name)
         return {"status": 200, 'source': 'img_create', "data": random_name}
     except Exception as ex:
@@ -637,8 +638,11 @@ def world_update(update: Update, context: CallbackContext) -> None:
     result = data_query("World")
     if result['type'] == 'image':
         try:
-            update.message.reply_photo(result['data'])
-            response = requests.post('http://image.bedribahru.com/delete', {'name': result['data']})
+            if result['source'] == 'cache':
+                img = update.message.reply_photo(result['data'])
+                cache_image("World", img)
+            else:
+                update.message.reply_photo(open(result['data'], 'rb'))
         except:
             update.message.reply_text(result['text'])
     elif result['type'] == 'text':
