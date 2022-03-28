@@ -445,6 +445,7 @@ def fetch_image(query, item):
         return {"status": 200, 'source': 'img_create', "data": random_name}
     except Exception as ex:
         print(ex)
+        logger.exception(ex)
         return {'status': 500, 'data': "None"}
 
 
